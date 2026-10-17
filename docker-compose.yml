@@ -1,0 +1,72 @@
+services:
+  router:
+    # 必要なPythonパッケージを含む、事前準備済みのイメージ
+    image: offline-python-router:latest
+    container_name: llm-router
+    restart: unless-stopped
+    working_dir: /app
+
+    # app.pyを直接起動する
+    command:
+      - uvicorn
+      - app:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+
+    ports:
+      - "8080:8080"
+
+    # ソースコードをマウントするため、Dockerfileでのビルドは不要
+    volumes:
+      - ./router/app.py:/app/app.py:ro
+
+    environment:
+      # LiteLLMの接続先
+      LITELLM_URL: "http://litellm:4000"
+      LITELLM_API_KEY: "change-this-key"
+
+      # Copilot Chatから指定するモデル名
+      MOE_MODEL_NAME: "local-moe"
+      DENSE_MODEL_NAME: "local-dense"
+
+      # LiteLLMに渡すDenseモデル名
+      DENSE_A_MODEL_NAME: "dense-a"
+      DENSE_B_MODEL_NAME: "dense-b"
+
+    depends_on:
+      - litellm
+
+    networks:
+      - llm-network
+
+  litellm:
+    # オフライン環境にロード済みのLiteLLMイメージ名に変更する
+    image: your-offline-litellm-image:latest
+    container_name: litellm
+    restart: unless-stopped
+
+    command:
+      - --config
+      - /app/config.yaml
+      - --port
+      - "4000"
+
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+
+    environment:
+      LITELLM_API_KEY: "change-this-key"
+
+      # 各vLLMの接続先
+      MOE_API_BASE: "http://<計算機AのIP>:8000/v1"
+      DENSE_A_API_BASE: "http://<計算機BのIP>:8000/v1"
+      DENSE_B_API_BASE: "http://<計算機BのIP>:8001/v1"
+
+    networks:
+      - llm-network
+
+networks:
+  llm-network:
+    driver: bridge
